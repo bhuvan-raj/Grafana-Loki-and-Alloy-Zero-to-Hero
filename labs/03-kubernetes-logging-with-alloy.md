@@ -1,17 +1,5 @@
 
-For a classroom/lab environment, I recommend **Loki Monolithic mode** rather than distributed Loki. Grafana currently recommends the monolithic Helm deployment for simpler installations, while distributed mode is intended for larger-scale deployments. ([Grafana Labs][1])
-
-## Lab Architecture
-
-![Image](https://images.openai.com/static-rsc-4/9rRhlFB7IU4n0u5h1jFkT9FtXiCemqDO7BTcMQrN4nuSoLbThg3rCl_AviyKmT5yvvOoVqXmVDxCqMSJkMDwArvXmdteZCBpIpi-cNzmdhpTzC3e2IxCGKKzMYZbK7R7NqGwiwB7oJGomGHvTyD92Pl51NYWZ8LND-yp_Z6J5I5ImnVKifv2HTMvz3HMkKGU?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/0vDKjzVdrYgvHcvDHidMIgMNndVEgtTULzg7u1TSmjE3WPuwg7Qq4GdtYVayeYW4yh7tCYUIgVd9IC5PVYA655RKs_cOylxaBQbiishoWOrybD_BP-Jveqjc-SnIYTxOxCBD5QI1d_wOKeu5uqt4zJ9Mdy2idpo-hfBYrqa-X2_zK3Zmy-HIxwPlZro0W1As?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/SVWIe0xk4yke3ptv9Y5CHX_rWjaWFzhnFz5H0oOdlmrZz8UQu8bRn8477aySqX79leFtquy5WksN70jbzi1xAXLitdlv1v2Nmojg9_QqI5ACy4jh1qRsXL6atM4WrjMuGj4WuZQUXJ34RcTLITEb66zLGObIOULKlSAxH3UkBXB5FAWtPyvEoW_mynM1MBG8?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/l7PoXUK4QfKNwprrAG_MBlSGf8EtBDQ8nmN8njSmqn9tspeGHKeihpugpUGdC2FvUJT38jbpBqrq3tmzQXsfTloYtG_WtoCIk1n6taw1hNdDpK_E0tkcnCqKGpsyPJr3xB0a258ZPypuflc9hjcG6g2G_xy7e8SOiZeFVA02Jp06-gBoeMeLwC7wcKABO5nf?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/iytEqFK6V8LWtrQgI1pXy5aOMLplBGs11bZe7D1DzzJRJYuhTslJnrI44NBJgNhgCpY41ui6oZW19iT-5bQ8gVa2Euw16e5oYHD3ax0-0X21hvGZRSheJvG5mWmoQDVum6napRvm7hZxeWV37rshunvHMxE-rH1IYeUcGMEosFVN87lvpwlvyumDfxNlNa6g?purpose=fullsize)
+#Lab Architecture
 
 ```text
                   Kubernetes Cluster
@@ -31,9 +19,9 @@ For a classroom/lab environment, I recommend **Loki Monolithic mode** rather tha
 │   │ discovery.kubernetes │                               │
 │   │          ↓           │                               │
 │   │ loki.source          │                               │
-│   │ .kubernetes           │                               │
+│   │ .kubernetes          │                              │
 │   │          ↓           │                               │
-│   │ loki.write            │                               │
+│   │ loki.write           │                               │
 │   └──────────┬───────────┘                               │
 │              │                                           │
 │              │ HTTP Push                                 │
@@ -53,8 +41,6 @@ For a classroom/lab environment, I recommend **Loki Monolithic mode** rather tha
         └──────────────┘
 ```
 
-The important thing for students to understand is that **Alloy is the collector/forwarder, while Loki is the log storage and query system**. Grafana then queries Loki to visualize the logs. Grafana's current documentation recommends Alloy for sending logs to Loki. ([Grafana Labs][2])
-
 ---
 
 # Lab — Deploy Loki and Grafana Alloy on Kubernetes
@@ -68,25 +54,6 @@ Students should have:
 * Helm 3
 * Basic Kubernetes knowledge
 
-For example, they can use:
-
-```bash
-kubectl get nodes
-```
-
-Expected:
-
-```text
-NAME       STATUS   ROLES
-node-1     Ready    <none>
-node-2     Ready    <none>
-```
-
-Check Helm:
-
-```bash
-helm version
-```
 
 ---
 
@@ -795,82 +762,7 @@ I'd specifically emphasize this to your students:
 
 Grafana's documentation describes Alloy as the recommended agent for sending logs to Loki, with components such as `discovery.kubernetes`, `loki.source.kubernetes`, and `loki.write` forming the collection pipeline. ([Grafana Labs][4])
 
----
-
-# Suggested Student Lab Tasks
-
-After you've demonstrated the basic setup, give them these exercises:
-
-### Task 1 — Deploy the stack
-
-* [ ] Deploy Loki using Helm.
-* [ ] Deploy Grafana Alloy.
-* [ ] Verify all Pods are running.
-
-### Task 2 — Deploy an application
-
-* [ ] Deploy nginx.
-* [ ] Generate HTTP requests.
-* [ ] Verify logs using `kubectl logs`.
-
-### Task 3 — Verify Alloy
-
-* [ ] Check Alloy logs.
-* [ ] Identify the `discovery.kubernetes` component.
-* [ ] Identify the `loki.source.kubernetes` component.
-* [ ] Identify the `loki.write` component.
-
-### Task 4 — Verify Loki
-
-* [ ] Query Loki's labels API.
-* [ ] Verify that Kubernetes log labels are present.
-* [ ] Identify the namespace, Pod and container labels.
-
-### Task 5 — Grafana
-
-* [ ] Deploy Grafana.
-* [ ] Add Loki as a data source.
-* [ ] Configure the `X-Scope-OrgID` header.
-* [ ] Open Grafana Explore.
-* [ ] Query nginx logs using LogQL.
-
-### Task 6 — Troubleshooting
-
-Intentionally break the Alloy configuration:
-
-```text
-loki.write
-     ↓
-wrong Loki URL
-```
-
-Ask students:
-
-> Why are logs no longer appearing in Grafana?
-
-They should trace:
-
-```text
-Application
-    ↓
-Alloy
-    ↓
-Loki
-    ↓
-Grafana
-```
-
-This is much better as a DevOps lab because they're not just following installation commands—they're learning **how to troubleshoot the entire logging pipeline**.
-
-### Production note
-
-Don't present the above Loki filesystem/single-replica setup as production architecture. It's deliberately a **classroom setup**. For production, Loki should normally use appropriate object storage and a highly available deployment; Grafana's current documentation recommends external object storage for production and notes that the bundled MinIO option is deprecated. ([Grafana Labs][1])
-
-For your students, I would teach the Loki/Alloy sequence as:
-
-**1. Loki architecture → 2. Install Loki → 3. Alloy architecture → 4. Install Alloy → 5. Alloy components → 6. Kubernetes log discovery → 7. Loki labels → 8. LogQL → 9. Grafana → 10. Troubleshooting → 11. Production architecture.**
-
-That gives them a very solid **Loki + Alloy Zero-to-Production foundation**.
+## Official References
 
 [1]: https://grafana.com/docs/loki/latest/setup/install/helm/install-monolithic/?utm_source=chatgpt.com "Install the monolithic Helm chart | Grafana Loki documentation"
 [2]: https://grafana.com/docs/loki/latest/setup/install/local/?utm_source=chatgpt.com "Install Grafana Loki locally | Grafana Loki documentation"
