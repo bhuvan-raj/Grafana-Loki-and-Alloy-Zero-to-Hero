@@ -1,5 +1,5 @@
 
-#Lab Architecture
+# Lab Architecture
 
 ```text
                   Kubernetes Cluster
@@ -19,7 +19,7 @@
 │   │ discovery.kubernetes │                               │
 │   │          ↓           │                               │
 │   │ loki.source          │                               │
-│   │ .kubernetes          │                              │
+│   │ .kubernetes          │                               │
 │   │          ↓           │                               │
 │   │ loki.write           │                               │
 │   └──────────┬───────────┘                               │
