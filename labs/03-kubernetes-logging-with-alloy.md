@@ -169,6 +169,47 @@ loki:
 singleBinary:
   replicas: 1
 
+# Disable other deployment modes
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+ingester:
+  replicas: 0
+
+querier:
+  replicas: 0
+
+queryFrontend:
+  replicas: 0
+
+queryScheduler:
+  replicas: 0
+
+distributor:
+  replicas: 0
+
+compactor:
+  replicas: 0
+
+indexGateway:
+  replicas: 0
+
+bloomPlanner:
+  replicas: 0
+
+bloomBuilder:
+  replicas: 0
+
+bloomGateway:
+  replicas: 0
+
+# We don't need the gateway for this lab
 gateway:
   enabled: false
 
