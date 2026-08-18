@@ -5,77 +5,73 @@
 
 In this lab, we will build a complete Kubernetes logging pipeline using:
 
-- Kubernetes
-- Grafana Alloy
-- Grafana Loki
-- Grafana
-- LogQL
+* Kubernetes
+* Grafana Alloy
+* Grafana Loki
+* Grafana
 
-By the end of this lab, students will understand how Grafana Alloy discovers Kubernetes Pods, collects their logs, optionally processes them, and forwards them to Loki.
+We will learn how to:
+
+* Deploy Loki in monolithic mode
+* Deploy Grafana Alloy
+* Discover Kubernetes Pods using `discovery.kubernetes`
+* Collect Pod logs using `loki.source.kubernetes`
+* Process logs using `loki.process`
+* Add labels to logs
+* Forward logs using `forward_to`
+* Send logs to Loki using `loki.write`
+* Query logs using LogQL
+* Visualize logs using Grafana Explore
 
 ---
 
-# 🏗️ Final Architecture
+# 🏗️ Lab Architecture
+
+The final architecture will be:
 
 ```text
                          Kubernetes Cluster
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   ┌───────────────────┐                                     │
-│   │  Application Pod  │                                     │
-│   │                   │                                     │
-│   │      nginx        │                                     │
-│   └─────────┬─────────┘                                     │
-│             │                                               │
-│             │ Container logs                                │
-│             ▼                                               │
-│   ┌──────────────────────────────┐                          │
-│   │        Grafana Alloy         │                          │
-│   │                              │                          │
-│   │  discovery.kubernetes        │                          │
-│   │             ↓                │                          │
-│   │  loki.source.kubernetes      │                          │
-│   │             ↓                │                          │
-│   │  loki.process (optional)     │                          │
-│   │             ↓                │                          │
-│   │  loki.write                  │                          │
-│   └──────────────┬───────────────┘                          │
-│                  │                                          │
-│                  │ HTTP Push                               │
-│                  ▼                                          │
-│   ┌──────────────────────────────┐                          │
-│   │          Grafana Loki        │                          │
-│   │                              │                          │
-│   │     Log storage + query      │                          │
-│   └──────────────┬───────────────┘                          │
-│                  │                                          │
-└──────────────────┼──────────────────────────────────────────┘
-                   │
-                   │ LogQL
-                   ▼
-          ┌──────────────────┐
-          │     Grafana      │
-          │     Explore      │
-          └──────────────────┘
-````
-
----
-
-# 🔄 Alloy Pipeline
-
-The basic pipeline is:
-
-```text
-discovery.kubernetes
-        ↓
-loki.source.kubernetes
-        ↓
-loki.write
-        ↓
-       Loki
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│   ┌───────────────────┐                                      │
+│   │   Application Pod │                                      │
+│   │                   │                                      │
+│   │   nginx           │                                      │
+│   └─────────┬─────────┘                                      │
+│             │                                                │
+│             │ Container logs                                 │
+│             ▼                                                │
+│   ┌────────────────────────────────────────┐                 │
+│   │             Grafana Alloy              │                 │
+│   │                                        │                 │
+│   │  discovery.kubernetes                  │                 │
+│   │             ↓                          │                 │
+│   │  loki.source.kubernetes                │                 │
+│   │             ↓                          │                 │
+│   │  loki.process                          │                 │
+│   │             ↓                          │                 │
+│   │  loki.write                             │                 │
+│   └────────────────┬───────────────────────┘                 │
+│                    │                                         │
+│                    │ HTTP Push                               │
+│                    ▼                                         │
+│   ┌────────────────────────────────────────┐                 │
+│   │               Grafana Loki             │                 │
+│   │                                        │                 │
+│   │          Log storage + querying        │                 │
+│   └────────────────┬───────────────────────┘                 │
+│                    │                                         │
+└────────────────────┼─────────────────────────────────────────┘
+                     │
+                     │ LogQL
+                     ▼
+              ┌───────────────┐
+              │    Grafana    │
+              │    Explore    │
+              └───────────────┘
 ```
 
-After introducing processing:
+## Alloy Pipeline
 
 ```text
 discovery.kubernetes
@@ -91,35 +87,7 @@ loki.write
 
 ---
 
-# 📚 What You Will Learn
-
-By completing this lab, you will learn:
-
-* Installing Loki using Helm
-* Deploying Loki in monolithic mode
-* Kubernetes Services
-* Kubernetes DNS
-* Installing Grafana Alloy
-* Alloy configuration syntax
-* Alloy components
-* Arguments
-* Receivers
-* Exports
-* `forward_to`
-* `discovery.kubernetes`
-* `loki.source.kubernetes`
-* `loki.process`
-* `loki.write`
-* Kubernetes log collection
-* Loki multi-tenancy
-* `X-Scope-OrgID`
-* LogQL
-* Grafana Explore
-* Troubleshooting the complete logging pipeline
-
----
-
-# Prerequisites
+# 📋 Prerequisites
 
 Students should have:
 
@@ -127,8 +95,7 @@ Students should have:
 * `kubectl`
 * Helm 3
 * Basic Kubernetes knowledge
-* Basic Loki knowledge
-* Basic LogQL knowledge
+* Basic Loki/LogQL knowledge
 
 Verify Kubernetes:
 
@@ -167,15 +134,16 @@ loki   Active
 
 ---
 
-# 2. Add the Grafana Community Helm Repository
+# 2. Add Grafana Community Helm Repository
 
-Add the Loki Helm repository:
+Add the repository:
 
 ```bash
-helm repo add grafana-community https://grafana-community.github.io/helm-charts
+helm repo add grafana-community \
+  https://grafana-community.github.io/helm-charts
 ```
 
-Update repositories:
+Update:
 
 ```bash
 helm repo update
@@ -189,14 +157,16 @@ helm search repo grafana-community/loki
 
 ---
 
-# 3. Create Loki Values File
-
-Create a working directory:
+# 3. Create Lab Directory
 
 ```bash
 mkdir loki-alloy-lab
 cd loki-alloy-lab
 ```
+
+---
+
+# 4. Create Loki Configuration
 
 Create:
 
@@ -204,7 +174,7 @@ Create:
 nano loki-values.yaml
 ```
 
-Use the following configuration:
+Add:
 
 ```yaml
 deploymentMode: Monolithic
@@ -287,50 +257,28 @@ test:
   enabled: false
 ```
 
----
+### Why `deploymentMode: Monolithic`?
 
-# 4. Understanding the Loki Configuration
-
-## Deployment Mode
-
-```yaml
-deploymentMode: Monolithic
-```
-
-For this lab, Loki runs as a single process.
-
-Architecture:
-
-```text
-┌─────────────────┐
-│      Loki       │
-│                 │
-│ Distributor     │
-│ Ingester        │
-│ Querier         │
-│ Query Frontend  │
-│ Compactor       │
-│ etc.            │
-└─────────────────┘
-```
-
-This keeps the lab simple.
-
-It is suitable for learning and testing, not production-scale deployments.
-
----
-
-## Replication Factor
-
-```yaml
-replication_factor: 1
-```
-
-We have only one Loki replica:
+For this lab we want a simple single-node Loki deployment.
 
 ```text
 Loki
- └── 1 replica
+└── Single Binary
+```
+
+This is suitable for learning and testing.
+
+It is **not a production architecture**.
+
+---
+
+## Why `replication_factor: 1`?
+
+We are running only one Loki replica:
+
+```yaml
+singleBinary:
+  replicas: 1
 ```
 
 Therefore:
@@ -343,55 +291,36 @@ is appropriate for this lab.
 
 ---
 
-## Filesystem Storage
+## Why disable the gateway?
 
-```yaml
-storage:
-  type: filesystem
+We want the architecture to be:
+
+```text
+Alloy
+   ↓
+Loki Service
+   ↓
+Loki
 ```
 
-Loki stores data locally inside the Loki container's filesystem.
+instead of:
 
-This is suitable for this lab.
+```text
+Alloy
+   ↓
+Loki Gateway
+   ↓
+Loki
+```
 
-For production deployments, object storage such as S3, GCS, or Azure Blob Storage is commonly used.
-
----
-
-## Disable Gateway
+Therefore:
 
 ```yaml
 gateway:
   enabled: false
 ```
 
-We deliberately disable the Loki gateway.
-
-Therefore our architecture is:
-
-```text
-Alloy
-  ↓
-Kubernetes Service
-  ↓
-Loki
-```
-
-Instead of:
-
-```text
-Alloy
-  ↓
-Loki Gateway
-  ↓
-Loki
-```
-
-The Loki Service will be:
-
-```text
-loki.loki.svc.cluster.local
-```
+This also makes the Kubernetes networking easier for students to understand.
 
 ---
 
@@ -406,10 +335,16 @@ helm install loki \
   -n loki
 ```
 
-Check the Pods:
+Check:
 
 ```bash
 kubectl get pods -n loki
+```
+
+Wait until Loki is running:
+
+```bash
+kubectl get pods -n loki -w
 ```
 
 Expected:
@@ -419,9 +354,11 @@ NAME     READY   STATUS
 loki-0   2/2     Running
 ```
 
-Depending on the chart version, Loki may contain more than one container.
+Press:
 
-Wait until the Pod is fully ready.
+```text
+Ctrl + C
+```
 
 ---
 
@@ -433,60 +370,30 @@ Run:
 kubectl get svc -n loki
 ```
 
-You should see:
+You should have:
 
 ```text
 NAME   TYPE        CLUSTER-IP      PORT(S)
 loki   ClusterIP   10.x.x.x        3100/TCP
 ```
 
-The important Service is:
-
-```text
-loki
-```
-
-Its fully qualified Kubernetes DNS name is:
+The service DNS name is:
 
 ```text
 loki.loki.svc.cluster.local
 ```
 
-Therefore:
+Therefore Loki's push endpoint is:
 
 ```text
-Loki URL:
-
-http://loki.loki.svc.cluster.local:3100
+http://loki.loki.svc.cluster.local:3100/loki/api/v1/push
 ```
 
 ---
 
-# 7. Verify Loki Endpoints
+# 7. Verify Loki from Inside Kubernetes
 
-Run:
-
-```bash
-kubectl get endpoints -n loki
-```
-
-You should see an endpoint for:
-
-```text
-loki
-```
-
-For newer Kubernetes versions, you can also inspect EndpointSlices:
-
-```bash
-kubectl get endpointslice -n loki
-```
-
----
-
-# 8. Test Loki from Inside the Cluster
-
-This is better than relying only on port-forwarding because Alloy will access Loki from inside Kubernetes.
+Instead of relying only on port-forwarding, test Loki from another Pod.
 
 Run:
 
@@ -508,7 +415,7 @@ HTTP/1.1 200 OK
 ready
 ```
 
-This proves:
+This verifies:
 
 ```text
 Pod
@@ -520,36 +427,34 @@ Loki Service
 Loki
 ```
 
-is working.
-
 ---
 
-# 9. Test Loki API
+# 8. Understand Loki Multi-Tenancy
 
-Loki may require a tenant ID.
+The Loki installation used in this lab requires a tenant ID.
 
-Test:
+Without the tenant header:
 
 ```bash
-kubectl run curl-test \
-  --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl -v \
+curl \
   http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
 ```
 
-If you receive:
+you may receive:
 
 ```text
 401 Unauthorized
+
 no org id
 ```
 
-this is expected for a multi-tenant Loki configuration.
+Therefore we use:
 
-Test again with the tenant:
+```text
+X-Scope-OrgID: local
+```
+
+For example:
 
 ```bash
 kubectl run curl-test \
@@ -562,7 +467,7 @@ kubectl run curl-test \
   http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
 ```
 
-Expected:
+This should return:
 
 ```json
 {
@@ -571,16 +476,17 @@ Expected:
 }
 ```
 
-An empty data array is fine at this stage because we haven't sent logs yet.
+or a list of labels if logs have already been ingested.
 
 ---
 
 # Part 2 — Deploy Grafana Alloy
 
-# 10. Add Grafana Helm Repository
+# 9. Add Grafana Helm Repository
 
 ```bash
-helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add grafana \
+  https://grafana.github.io/helm-charts
 ```
 
 Update:
@@ -589,15 +495,9 @@ Update:
 helm repo update
 ```
 
-Verify:
-
-```bash
-helm search repo grafana/alloy
-```
-
 ---
 
-# 11. Create Alloy Namespace
+# 10. Create Alloy Namespace
 
 ```bash
 kubectl create namespace alloy
@@ -611,7 +511,7 @@ kubectl get namespace alloy
 
 ---
 
-# 12. Create Alloy Configuration
+# 11. Create Alloy Configuration
 
 Create:
 
@@ -630,18 +530,36 @@ alloy:
         format = "logfmt"
       }
 
+      // Discover Kubernetes Pods
       discovery.kubernetes "pods" {
         role = "pod"
       }
 
+      // Collect logs from discovered Pods
       loki.source.kubernetes "pods" {
         targets = discovery.kubernetes.pods.targets
+
+        forward_to = [
+          loki.process.pods.receiver,
+        ]
+      }
+
+      // Process and enrich logs
+      loki.process "pods" {
+
+        // Add a static label
+        stage.static_labels {
+          values = {
+            app = "nginx"
+          }
+        }
 
         forward_to = [
           loki.write.endpoint.receiver,
         ]
       }
 
+      // Send logs to Loki
       loki.write "endpoint" {
         endpoint {
           url       = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
@@ -652,24 +570,11 @@ alloy:
 
 ---
 
-# 13. Understand the Alloy Configuration
+# 12. Understand the Alloy Configuration
 
-## Logging Component
+This is the most important section of the lab.
 
-```alloy
-logging {
-  level  = "info"
-  format = "logfmt"
-}
-```
-
-Controls Alloy's own logs.
-
-It does not process Kubernetes application logs.
-
----
-
-# 14. Kubernetes Discovery
+## Component 1 — Kubernetes Discovery
 
 ```alloy
 discovery.kubernetes "pods" {
@@ -681,45 +586,105 @@ This discovers Kubernetes Pods.
 
 The component produces discovered targets.
 
-The component name is:
-
-```text
-discovery.kubernetes.pods
-```
-
-It can be referenced using:
+The exported target data is accessed using:
 
 ```alloy
 discovery.kubernetes.pods.targets
 ```
 
+Conceptually:
+
+```text
+Kubernetes API
+      ↓
+discovery.kubernetes
+      ↓
+targets
+```
+
 ---
 
-# 15. Kubernetes Log Source
+# Component 2 — Kubernetes Log Source
 
 ```alloy
 loki.source.kubernetes "pods" {
   targets = discovery.kubernetes.pods.targets
 
   forward_to = [
-    loki.write.endpoint.receiver,
+    loki.process.pods.receiver,
   ]
 }
 ```
 
-This component receives the discovered Pod targets and collects their Kubernetes container logs.
+The source receives the targets:
 
-The data flow is:
+```alloy
+targets = discovery.kubernetes.pods.targets
+```
 
-```text
-discovery.kubernetes.pods.targets
-              ↓
-loki.source.kubernetes
+and collects their container logs.
+
+The important part is:
+
+```alloy
+forward_to = [
+  loki.process.pods.receiver,
+]
+```
+
+This sends the logs to the receiver exposed by:
+
+```alloy
+loki.process "pods"
 ```
 
 ---
 
-# 16. Forward To
+# Component 3 — Loki Process
+
+```alloy
+loki.process "pods" {
+```
+
+This component is responsible for processing logs.
+
+We are using:
+
+```alloy
+stage.static_labels
+```
+
+to add a label.
+
+```alloy
+stage.static_labels {
+  values = {
+    app = "nginx"
+  }
+}
+```
+
+Therefore logs passing through this component receive:
+
+```text
+app="nginx"
+```
+
+For example, conceptually:
+
+Before processing:
+
+```text
+{namespace="default", pod="nginx-xxx"}
+```
+
+After processing:
+
+```text
+{namespace="default", pod="nginx-xxx", app="nginx"}
+```
+
+Then we forward the processed logs:
 
 ```alloy
 forward_to = [
@@ -727,31 +692,9 @@ forward_to = [
 ]
 ```
 
-`forward_to` specifies where the logs should be sent.
-
-Here:
-
-```text
-loki.write.endpoint.receiver
-```
-
-is the receiver exported by:
-
-```alloy
-loki.write "endpoint"
-```
-
-So:
-
-```text
-loki.source.kubernetes
-          ↓
-loki.write.endpoint.receiver
-```
-
 ---
 
-# 17. Loki Write Component
+# Component 4 — Loki Write
 
 ```alloy
 loki.write "endpoint" {
@@ -762,52 +705,49 @@ loki.write "endpoint" {
 }
 ```
 
-This defines where Alloy sends the logs.
+This component sends the logs to Loki.
 
-The URL:
+The endpoint is:
 
 ```text
 http://loki.loki.svc.cluster.local:3100/loki/api/v1/push
 ```
 
-is Loki's Push API.
-
----
-
-# 18. Tenant ID
-
-```alloy
-tenant_id = "local"
-```
-
-Our Loki installation requires a tenant ID.
-
-Alloy uses:
+The tenant is:
 
 ```text
 local
 ```
 
-as the tenant.
+---
 
-Conceptually, Alloy sends:
+# 13. Complete Alloy Data Flow
 
-```text
-X-Scope-OrgID: local
-```
-
-to Loki.
-
-Without this, Loki responds:
+The configuration creates this pipeline:
 
 ```text
-401 Unauthorized
-no org id
+discovery.kubernetes
+        │
+        │ targets
+        ▼
+loki.source.kubernetes
+        │
+        │ logs
+        ▼
+loki.process
+        │
+        │ app="nginx"
+        ▼
+loki.write
+        │
+        │ HTTP Push
+        ▼
+       Loki
 ```
 
 ---
 
-# 19. Install Alloy
+# 14. Install Alloy
 
 Run:
 
@@ -831,43 +771,58 @@ NAME          READY   STATUS
 alloy-xxxxx   2/2     Running
 ```
 
-The exact number of containers depends on the Alloy Helm chart version.
+The Alloy Helm chart deploys Alloy as a DaemonSet by default.
 
----
-
-# 20. Check Alloy DaemonSet
-
-The Helm chart may deploy Alloy as a DaemonSet depending on its configuration.
-
-Check:
+Verify:
 
 ```bash
-kubectl get deployment,statefulset,daemonset -n alloy
+kubectl get daemonset -n alloy
 ```
 
-For the lab configuration used here, you should verify the actual controller created by Helm instead of assuming it.
-
-If it is a DaemonSet:
+Expected:
 
 ```text
-DaemonSet
-   ↓
-One Alloy Pod per eligible node
+NAME    DESIRED   CURRENT   READY
+alloy   1         1         1
+```
+
+For a single-node lab cluster, one Alloy Pod is expected.
+
+---
+
+# 15. Verify Alloy Configuration
+
+Check the ConfigMap:
+
+```bash
+kubectl get configmap alloy \
+  -n alloy \
+  -o yaml
+```
+
+You should see:
+
+```text
+discovery.kubernetes
+loki.source.kubernetes
+loki.process
+loki.write
 ```
 
 ---
 
-# 21. Check Alloy Logs
+# 16. Check Alloy Logs
 
 Run:
 
 ```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy
+kubectl logs \
+  -n alloy \
+  -l app.kubernetes.io/name=alloy \
+  --tail=50
 ```
 
-You should see Alloy discovering Kubernetes Pods.
-
-For example:
+You should see messages such as:
 
 ```text
 tailer running
@@ -879,18 +834,20 @@ and:
 opened log stream
 ```
 
-You should not see:
+For example:
 
 ```text
-401 Unauthorized
-no org id
+component_id=loki.source.kubernetes.pods
+target=default/nginx-xxxxx:nginx
 ```
+
+This confirms Alloy is discovering and opening Kubernetes log streams.
 
 ---
 
-# Part 3 — Deploy Nginx
+# Part 3 — Deploy nginx
 
-# 22. Create Nginx Deployment
+# 17. Create nginx Deployment
 
 Create:
 
@@ -898,7 +855,7 @@ Create:
 nano nginx.yaml
 ```
 
-Use:
+Add:
 
 ```yaml
 apiVersion: apps/v1
@@ -934,7 +891,7 @@ Apply:
 kubectl apply -f nginx.yaml
 ```
 
-Verify:
+Check:
 
 ```bash
 kubectl get pods
@@ -950,7 +907,7 @@ nginx-xxxxxxxxxx-xxxxx   1/1     Running
 
 ---
 
-# 23. Verify Nginx Logs
+# 18. Generate nginx Logs
 
 Get the Pods:
 
@@ -958,58 +915,80 @@ Get the Pods:
 kubectl get pods
 ```
 
-Then:
+Example:
 
-```bash
-kubectl logs <nginx-pod>
+```text
+nginx-59f86b59ff-5rrzx
+nginx-59f86b59ff-v5rsd
 ```
 
-You should eventually see nginx access logs.
-
----
-
-# 24. Generate Nginx Logs
-
-Run:
+Generate requests:
 
 ```bash
-kubectl exec <nginx-pod> -- curl localhost
+kubectl exec nginx-59f86b59ff-5rrzx -- curl localhost
 ```
 
 Run multiple requests:
 
 ```bash
-kubectl exec <nginx-pod> -- curl localhost
-kubectl exec <nginx-pod> -- curl localhost
-kubectl exec <nginx-pod> -- curl localhost
+kubectl exec nginx-59f86b59ff-5rrzx -- curl localhost
 ```
-
-Verify:
 
 ```bash
-kubectl logs <nginx-pod>
+kubectl exec nginx-59f86b59ff-5rrzx -- curl localhost
 ```
 
-You should see entries similar to:
-
-```text
-GET / HTTP/1.1
+```bash
+kubectl exec nginx-59f86b59ff-v5rsd -- curl localhost
 ```
 
 ---
 
-# Part 4 — Verify Alloy Collects the Logs
+# 19. Verify Kubernetes Logs
 
-Check Alloy:
+Check:
 
 ```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy --tail=30
+kubectl logs nginx-59f86b59ff-5rrzx
 ```
 
-You should see entries similar to:
+You should see nginx access logs:
 
 ```text
-tailer running
+10.244.x.x - - [18/Aug/2026:09:00:00 +0000] "GET / HTTP/1.1" 200 ...
+```
+
+This proves:
+
+```text
+nginx
+ ↓
+stdout
+ ↓
+Kubernetes container logs
+```
+
+Now Alloy should collect these logs.
+
+---
+
+# Part 4 — Verify Alloy → Loki
+
+# 20. Check Alloy Log Collection
+
+Run:
+
+```bash
+kubectl logs \
+  -n alloy \
+  -l app.kubernetes.io/name=alloy \
+  --tail=50
+```
+
+Look for:
+
+```text
+target=default/nginx-xxxxx:nginx
 ```
 
 and:
@@ -1018,254 +997,17 @@ and:
 opened log stream
 ```
 
-For example:
+This confirms:
 
 ```text
-target=default/nginx-xxxxx:nginx
-```
-
-This confirms Alloy discovered the nginx Pod.
-
----
-
-# Part 5 — Verify Loki Received Logs
-
-Query Loki labels:
-
-```bash
-kubectl run curl-test \
-  --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl \
-  -H "X-Scope-OrgID: local" \
-  http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
-```
-
-After logs have been ingested, you should receive:
-
-```json
-{
-  "status": "success",
-  "data": [
-    "instance",
-    "job",
-    "service_name"
-  ]
-}
-```
-
-The exact labels may vary depending on the Alloy/Loki version and configuration.
-
-Do not assume that labels such as:
-
-```text
-pod
-namespace
-container
-```
-
-will automatically appear in every configuration.
-
----
-
-# Part 6 — Query Logs Directly from Loki
-
-You can query Loki's API directly.
-
-For example:
-
-```bash
-kubectl run curl-test \
-  --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl \
-  -H "X-Scope-OrgID: local" \
-  "http://loki.loki.svc.cluster.local:3100/loki/api/v1/query?query=%7Bjob%3D~%22.%2B%22%7D"
-```
-
-If logs exist, Loki returns the matching streams.
-
----
-
-# Part 7 — Add `loki.process`
-
-Now we will introduce log processing.
-
-The pipeline becomes:
-
-```text
-discovery.kubernetes
-        ↓
-loki.source.kubernetes
-        ↓
-loki.process
-        ↓
-loki.write
-        ↓
-Loki
+Kubernetes
+    ↓
+Alloy
 ```
 
 ---
 
-# 25. Modify Alloy Configuration
-
-Update `alloy-values.yaml`:
-
-```yaml
-alloy:
-  configMap:
-    content: |
-      logging {
-        level  = "info"
-        format = "logfmt"
-      }
-
-      discovery.kubernetes "pods" {
-        role = "pod"
-      }
-
-      loki.source.kubernetes "pods" {
-        targets = discovery.kubernetes.pods.targets
-
-        forward_to = [
-          loki.process.add_app.receiver,
-        ]
-      }
-
-      loki.process "add_app" {
-        stage.static_labels {
-          values = {
-            app = "nginx",
-          }
-        }
-
-        forward_to = [
-          loki.write.endpoint.receiver,
-        ]
-      }
-
-      loki.write "endpoint" {
-        endpoint {
-          url       = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
-          tenant_id = "local"
-        }
-      }
-```
-
----
-
-# 26. Understand `loki.process`
-
-The new component is:
-
-```alloy
-loki.process "add_app" {
-```
-
-It receives logs from:
-
-```alloy
-loki.source.kubernetes
-```
-
-using:
-
-```alloy
-loki.process.add_app.receiver
-```
-
-The process stage is:
-
-```alloy
-stage.static_labels {
-  values = {
-    app = "nginx",
-  }
-}
-```
-
-This adds:
-
-```text
-app="nginx"
-```
-
-to the log stream.
-
-The logs are then forwarded to:
-
-```alloy
-loki.write.endpoint.receiver
-```
-
----
-
-# 27. Upgrade Alloy
-
-Run:
-
-```bash
-helm upgrade alloy \
-  grafana/alloy \
-  -f alloy-values.yaml \
-  -n alloy
-```
-
-Restart the Alloy controller if required by the deployment:
-
-```bash
-kubectl rollout restart daemonset alloy -n alloy
-```
-
-If Alloy is not a DaemonSet, inspect:
-
-```bash
-kubectl get deployment,statefulset,daemonset -n alloy
-```
-
-and restart the controller that Helm created.
-
----
-
-# 28. Verify Alloy
-
-```bash
-kubectl get pods -n alloy
-```
-
-Then:
-
-```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy --tail=30
-```
-
-Make sure there are no configuration errors.
-
----
-
-# 29. Generate New Nginx Logs
-
-Run:
-
-```bash
-kubectl exec <nginx-pod> -- curl localhost
-```
-
-Run it several times:
-
-```bash
-kubectl exec <nginx-pod> -- curl localhost
-kubectl exec <nginx-pod> -- curl localhost
-kubectl exec <nginx-pod> -- curl localhost
-```
-
----
-
-# 30. Verify the New Label
+# 21. Check Loki Labels
 
 Run:
 
@@ -1280,7 +1022,7 @@ kubectl run curl-test \
   http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
 ```
 
-You should now see:
+Expected output should include:
 
 ```json
 {
@@ -1294,17 +1036,70 @@ You should now see:
 }
 ```
 
-The important addition is:
+The important part is:
 
 ```text
 app
 ```
 
+This proves that our `loki.process` stage added the label.
+
 ---
 
-# Part 8 — Install Grafana
+# Part 5 — Query Logs Directly from Loki
 
-# 31. Create Grafana Namespace
+# 22. Query Logs for the nginx Application
+
+Loki provides the `/loki/api/v1/query_range` API.
+
+We can use it to query logs directly.
+
+For example:
+
+```bash
+kubectl run curl-test \
+  --rm -it \
+  --image=curlimages/curl \
+  --restart=Never \
+  -- \
+  curl \
+  -G \
+  -H "X-Scope-OrgID: local" \
+  --data-urlencode 'query={app="nginx"}' \
+  http://loki.loki.svc.cluster.local:3100/loki/api/v1/query_range
+```
+
+If logs have been ingested, Loki will return the matching streams.
+
+---
+
+# 23. Query Logs for a Specific Pod
+
+First:
+
+```bash
+kubectl get pods
+```
+
+Suppose the Pod is:
+
+```text
+nginx-59f86b59ff-5rrzx
+```
+
+Use LogQL:
+
+```logql
+{app="nginx", pod="nginx-59f86b59ff-5rrzx"}
+```
+
+You can test this in Grafana later.
+
+---
+
+# Part 6 — Install Grafana
+
+# 24. Create Monitoring Namespace
 
 ```bash
 kubectl create namespace monitoring
@@ -1312,7 +1107,7 @@ kubectl create namespace monitoring
 
 ---
 
-# 32. Install Grafana
+# 25. Install Grafana
 
 ```bash
 helm install grafana \
@@ -1326,15 +1121,18 @@ Check:
 kubectl get pods -n monitoring
 ```
 
-Wait until Grafana is:
+Wait until:
 
 ```text
+STATUS
 Running
 ```
 
 ---
 
-# 33. Get Grafana Password
+# 26. Get Grafana Password
+
+Run:
 
 ```bash
 kubectl get secret grafana \
@@ -1348,16 +1146,17 @@ Username:
 admin
 ```
 
-Save the password.
-
 ---
 
-# 34. Access Grafana
+# 27. Access Grafana
 
-Run:
+Port-forward:
 
 ```bash
-kubectl port-forward -n monitoring svc/grafana 3000:80
+kubectl port-forward \
+  -n monitoring \
+  svc/grafana \
+  3000:80
 ```
 
 Open:
@@ -1375,21 +1174,23 @@ Password: <password>
 
 ---
 
-# Part 9 — Configure Loki Data Source
+# Part 7 — Configure Loki in Grafana
+
+# 28. Add Loki Data Source
 
 In Grafana:
 
 ```text
 Connections
-    ↓
+      ↓
 Data sources
-    ↓
+      ↓
 Add data source
-    ↓
+      ↓
 Loki
 ```
 
-Use:
+Set:
 
 ```text
 URL:
@@ -1397,19 +1198,19 @@ URL:
 http://loki.loki.svc.cluster.local:3100
 ```
 
-Because Grafana is running inside Kubernetes, it can resolve the Loki Service using Kubernetes DNS.
+Because Grafana is running inside Kubernetes, it can resolve:
+
+```text
+loki.loki.svc.cluster.local
+```
+
+through Kubernetes DNS.
 
 ---
 
-## Configure Tenant Header
+# 29. Configure Loki Tenant
 
-Our Loki installation requires a tenant ID.
-
-Under:
-
-```text
-HTTP Headers
-```
+Because our Loki installation requires a tenant ID, configure the HTTP header.
 
 Add:
 
@@ -1425,17 +1226,13 @@ Value:
 local
 ```
 
-The final configuration is:
+So Grafana sends:
 
-```text
-URL:
-
-http://loki.loki.svc.cluster.local:3100
-
-HTTP Header:
-
+```http
 X-Scope-OrgID: local
 ```
+
+to Loki.
 
 Click:
 
@@ -1443,7 +1240,7 @@ Click:
 Save & Test
 ```
 
-Expected:
+You should get:
 
 ```text
 Data source connected successfully
@@ -1451,7 +1248,9 @@ Data source connected successfully
 
 ---
 
-# Part 10 — Query Logs in Grafana
+# Part 8 — Query Logs Using Grafana
+
+# 30. Open Explore
 
 Go to:
 
@@ -1467,303 +1266,401 @@ Loki
 
 ---
 
-## Query all logs
+# 31. Query All nginx Logs
 
-If your available labels support it:
-
-```logql
-{job=~".+"}
-```
-
----
-
-## Query the processed nginx logs
-
-After the `loki.process` exercise:
+Use:
 
 ```logql
 {app="nginx"}
 ```
 
-This selects streams with:
+You should see nginx logs.
+
+---
+
+# 32. Query a Specific Pod
+
+Get the Pod name:
+
+```bash
+kubectl get pods
+```
+
+For example:
 
 ```text
-app="nginx"
+nginx-59f86b59ff-5rrzx
+```
+
+Use:
+
+```logql
+{app="nginx", pod="nginx-59f86b59ff-5rrzx"}
+```
+
+This returns logs only from that specific Pod.
+
+---
+
+# 33. Query Both nginx Pods
+
+You can use a regular expression:
+
+```logql
+{app="nginx", pod=~"nginx-.*"}
+```
+
+This matches all Pods whose name begins with:
+
+```text
+nginx-
 ```
 
 ---
 
-## Filter log content
+# 34. Search for HTTP Requests
 
-For example:
+You can filter log content:
 
 ```logql
 {app="nginx"} |= "GET"
 ```
 
-This means:
+Or:
 
-```text
-Select streams where:
+```logql
+{app="nginx"} |= "200"
+```
 
-app = nginx
+For example:
 
-AND
-
-log line contains "GET"
+```logql
+{app="nginx"} |= "GET /"
 ```
 
 ---
 
-# Part 11 — Understanding Alloy Data Flow
+# Part 9 — Understand `loki.process`
 
-Students should understand the following:
+Now students should understand why the process component exists.
 
-```text
-discovery.kubernetes "pods"
-```
-
-creates:
+Our current pipeline is:
 
 ```text
-discovery.kubernetes.pods
+SOURCE
+   ↓
+PROCESS
+   ↓
+WRITE
 ```
 
-Its exported target collection is:
-
-```text
-discovery.kubernetes.pods.targets
-```
-
-That becomes an argument to:
-
-```text
-loki.source.kubernetes "pods"
-```
-
-The source exposes:
-
-```text
-loki.source.kubernetes.pods.receiver
-```
-
-But we don't directly reference it here.
-
-Instead, we configure:
-
-```alloy
-forward_to = [
-  loki.process.add_app.receiver,
-]
-```
-
-This sends log entries to the process component.
-
-The process component exposes:
-
-```text
-loki.process.add_app.receiver
-```
-
-and forwards processed logs to:
-
-```text
-loki.write.endpoint.receiver
-```
-
-Finally:
-
-```text
-loki.write
-```
-
-sends the logs to Loki.
-
----
-
-# Component Flow
-
-```text
-                    ARGUMENT
-                       │
-                       ▼
-discovery.kubernetes.pods.targets
-                       │
-                       ▼
-              loki.source.kubernetes
-                       │
-                       │ forward_to
-                       ▼
-              loki.process.add_app
-                       │
-                       │ forward_to
-                       ▼
-                loki.write.endpoint
-                       │
-                       ▼
-                      Loki
-```
-
----
-
-# Part 12 — Arguments, Receivers and Exports
-
-This lab demonstrates three important Alloy concepts.
-
-## Arguments
-
-Example:
-
-```alloy
-targets = discovery.kubernetes.pods.targets
-```
-
-`targets` is an argument accepted by:
+Specifically:
 
 ```text
 loki.source.kubernetes
+        ↓
+loki.process
+        ↓
+loki.write
 ```
 
 ---
 
-## Receivers
+# 35. Static Labels
 
-Example:
+Our process configuration is:
 
 ```alloy
-loki.write.endpoint.receiver
+loki.process "pods" {
+
+  stage.static_labels {
+    values = {
+      app = "nginx"
+    }
+  }
+
+  forward_to = [
+    loki.write.endpoint.receiver,
+  ]
+}
 ```
 
-This identifies the receiver exposed by:
+The stage:
+
+```alloy
+stage.static_labels
+```
+
+adds:
+
+```text
+app="nginx"
+```
+
+to the logs.
+
+---
+
+# 36. Why Process Logs?
+
+`loki.process` can be used for many types of log processing.
+
+For example:
+
+```text
+Parse logs
+     ↓
+Extract fields
+     ↓
+Add labels
+     ↓
+Drop unwanted logs
+     ↓
+Rewrite labels
+     ↓
+Add structured metadata
+     ↓
+Forward to Loki
+```
+
+Some commonly used processing stages include:
+
+```text
+stage.static_labels
+stage.json
+stage.regex
+stage.logfmt
+stage.labels
+stage.drop
+stage.timestamp
+stage.replace
+stage.match
+```
+
+This gives students a foundation for more advanced Alloy pipelines.
+
+---
+
+# Part 10 — Understanding Alloy Components
+
+Students should understand the naming convention.
+
+For example:
+
+```alloy
+loki.process "pods"
+```
+
+has:
+
+```text
+Component type:
+loki.process
+
+Component label:
+pods
+```
+
+The full component reference is:
+
+```text
+loki.process.pods
+```
+
+Its receiver is:
+
+```text
+loki.process.pods.receiver
+```
+
+Similarly:
 
 ```alloy
 loki.write "endpoint"
 ```
 
+becomes:
+
+```text
+loki.write.endpoint
+```
+
+and exposes:
+
+```text
+loki.write.endpoint.receiver
+```
+
+---
+
+# 37. Understanding `forward_to`
+
+This:
+
+```alloy
+forward_to = [
+  loki.process.pods.receiver,
+]
+```
+
+means:
+
+> Send the data to the receiver of `loki.process.pods`.
+
+Then:
+
+```alloy
+loki.process "pods" {
+    ...
+    
+    forward_to = [
+      loki.write.endpoint.receiver,
+    ]
+}
+```
+
+means:
+
+> Send the processed data to the receiver of `loki.write.endpoint`.
+
+Therefore:
+
+```text
+loki.source
+     │
+     │ forward_to
+     ▼
+loki.process
+     │
+     │ forward_to
+     ▼
+loki.write
+```
+
+---
+
+# 38. Arguments, Receivers and Exports
+
+This lab also demonstrates three important Alloy concepts.
+
+## Arguments
+
+For example:
+
+```alloy
+targets = discovery.kubernetes.pods.targets
+```
+
+`targets` is an argument of:
+
+```text
+loki.source.kubernetes
+```
+
 Another example:
 
 ```alloy
-loki.process.add_app.receiver
+url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+```
+
+`url` is an argument of the Loki endpoint.
+
+---
+
+## Receivers
+
+This:
+
+```alloy
+loki.process.pods.receiver
+```
+
+is a receiver.
+
+It is where another component sends data.
+
+For example:
+
+```alloy
+forward_to = [
+  loki.process.pods.receiver,
+]
 ```
 
 ---
 
 ## Exports
 
-Components can expose data that other components can reference.
+A component can expose data for other components.
 
 For example:
+
+```alloy
+discovery.kubernetes.pods.targets
+```
+
+is an exported value from:
+
+```alloy
+discovery.kubernetes "pods"
+```
+
+which is consumed by:
+
+```alloy
+loki.source.kubernetes
+```
+
+Therefore:
 
 ```text
 discovery.kubernetes.pods.targets
 ```
 
-is an exported target collection.
-
-It is consumed by:
-
-```alloy
-targets = discovery.kubernetes.pods.targets
-```
+is an example of a component export.
 
 ---
 
-# Part 13 — Troubleshooting
+# Part 11 — Troubleshooting
 
-## Problem 1 — Loki installation fails with replica validation error
+## Problem 1 — Loki installation fails with replica error
 
 If you see:
 
 ```text
 You have more than zero replicas configured for both
-the monolithic and simple scalable targets
+the monolithic and simple scalable targets.
 ```
 
-verify that all unused deployment targets have:
+make sure your values file disables the other deployment modes:
 
 ```yaml
-replicas: 0
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
 ```
 
-and that:
+and:
+
+```yaml
+singleBinary:
+  replicas: 1
+```
+
+Also ensure:
 
 ```yaml
 deploymentMode: Monolithic
 ```
 
-is configured.
-
-Check:
-
-```bash
-helm get values loki -n loki
-```
-
 ---
 
-# Problem 2 — Loki Pod is not ready
-
-Check:
-
-```bash
-kubectl get pods -n loki
-```
-
-Then:
-
-```bash
-kubectl describe pod loki-0 -n loki
-```
-
-Check logs:
-
-```bash
-kubectl logs -n loki loki-0
-```
-
-If Loki has multiple containers, use:
-
-```bash
-kubectl logs -n loki loki-0 -c <container-name>
-```
-
----
-
-# Problem 3 — Loki DNS doesn't work
-
-Check:
-
-```bash
-kubectl get svc -n loki
-```
-
-You should have:
-
-```text
-loki
-```
-
-Test DNS/networking:
-
-```bash
-kubectl run curl-test \
-  --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl \
-  http://loki.loki.svc.cluster.local:3100/ready
-```
-
-Expected:
-
-```text
-ready
-```
-
----
-
-# Problem 4 — Loki returns `401 no org id`
+# Problem 2 — Loki returns `401 no org id`
 
 If:
 
@@ -1778,9 +1675,13 @@ returns:
 no org id
 ```
 
-Loki requires a tenant.
+add:
 
-Use:
+```http
+X-Scope-OrgID: local
+```
+
+Example:
 
 ```bash
 curl \
@@ -1788,73 +1689,93 @@ curl \
   http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
 ```
 
-And ensure Alloy has:
+And make sure Alloy contains:
 
-```alloy
-tenant_id = "local"
+```yaml
+tenant_id: "local"
 ```
 
-Grafana must also send:
-
-```text
-X-Scope-OrgID: local
-```
+inside the Loki endpoint.
 
 ---
 
-# Problem 5 — Alloy returns `401 no org id`
+# Problem 3 — Alloy reports `no org id`
 
-Check the ConfigMap:
+If Alloy logs contain:
 
-```bash
-kubectl get configmap alloy -n alloy -o yaml
+```text
+status=401
+error="server returned HTTP status 401 Unauthorized (401): no org id"
 ```
 
-Make sure it contains:
+check:
 
 ```alloy
-tenant_id = "local"
+loki.write "endpoint" {
+  endpoint {
+    url       = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+    tenant_id = "local"
+  }
+}
 ```
 
-Then restart the Alloy controller.
-
-For a DaemonSet:
+Then upgrade Alloy:
 
 ```bash
-kubectl rollout restart daemonset alloy -n alloy
+helm upgrade alloy \
+  grafana/alloy \
+  -f alloy-values.yaml \
+  -n alloy
 ```
 
 Check:
 
 ```bash
-kubectl get pods -n alloy
+kubectl get configmap alloy -n alloy -o yaml
 ```
 
-Then:
+Verify:
 
-```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy
+```text
+tenant_id = "local"
 ```
 
 ---
 
-# Problem 6 — Alloy cannot discover Pods
+# Problem 4 — Alloy isn't collecting logs
 
-Check Alloy logs:
+Check:
 
 ```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy
+kubectl logs \
+  -n alloy \
+  -l app.kubernetes.io/name=alloy \
+  --tail=50
 ```
 
 Look for:
 
 ```text
-forbidden
-permission denied
-cannot list pods
+tailer running
 ```
 
-Check RBAC:
+and:
+
+```text
+opened log stream
+```
+
+For example:
+
+```text
+target=default/nginx-xxxxx:nginx
+```
+
+---
+
+# Problem 5 — Alloy has RBAC errors
+
+Check:
 
 ```bash
 kubectl get clusterrole | grep alloy
@@ -1866,74 +1787,41 @@ and:
 kubectl get clusterrolebinding | grep alloy
 ```
 
-Also inspect the Alloy ServiceAccount:
+Also inspect:
 
 ```bash
-kubectl get serviceaccount -n alloy
+kubectl describe pod -n alloy <alloy-pod>
 ```
 
 ---
 
-# Problem 7 — Alloy discovers Pods but no logs appear
+# Problem 6 — Loki Service isn't reachable
 
-First verify Kubernetes itself has logs:
-
-```bash
-kubectl logs <nginx-pod>
-```
-
-If logs exist:
-
-```text
-Kubernetes
-    ↓
-    OK
-```
-
-Then check:
-
-```text
-Kubernetes
-    ↓
-Alloy
-```
-
-using:
-
-```bash
-kubectl logs -n alloy -l app.kubernetes.io/name=alloy
-```
-
-Then verify Loki:
-
-```bash
-kubectl run curl-test \
-  --rm -it \
-  --image=curlimages/curl \
-  --restart=Never \
-  -- \
-  curl \
-  -H "X-Scope-OrgID: local" \
-  http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
-```
-
----
-
-# Problem 8 — Grafana cannot connect to Loki
-
-Verify Loki:
-
-```bash
-kubectl get pods -n loki
-```
-
-Verify Service:
+Check:
 
 ```bash
 kubectl get svc -n loki
 ```
 
-Test:
+You should see:
+
+```text
+loki
+```
+
+Check endpoints:
+
+```bash
+kubectl get endpoints -n loki
+```
+
+You should see something similar to:
+
+```text
+loki   10.244.x.x:3100
+```
+
+Then test:
 
 ```bash
 kubectl run curl-test \
@@ -1951,49 +1839,112 @@ Expected:
 ready
 ```
 
-Then check the Grafana Loki data source.
+---
 
-URL:
+# Problem 7 — Grafana cannot connect to Loki
+
+Verify the Loki service:
+
+```bash
+kubectl get svc -n loki
+```
+
+Use:
 
 ```text
 http://loki.loki.svc.cluster.local:3100
 ```
 
-Header:
+Do **not** use:
+
+```text
+http://loki-gateway.loki.svc.cluster.local
+```
+
+because this lab disables the gateway.
+
+Also configure:
 
 ```text
 X-Scope-OrgID: local
 ```
 
+in the Grafana Loki data source.
+
 ---
 
-# Part 14 — Cleanup
+# Problem 8 — Grafana shows no logs
 
-Remove nginx:
+Troubleshoot from left to right:
+
+```text
+Kubernetes
+    ↓
+Alloy
+    ↓
+Loki
+    ↓
+Grafana
+```
+
+First check:
+
+```bash
+kubectl logs <nginx-pod>
+```
+
+If that works, check Alloy:
+
+```bash
+kubectl logs -n alloy -l app.kubernetes.io/name=alloy
+```
+
+Then query Loki:
+
+```bash
+kubectl run curl-test \
+  --rm -it \
+  --image=curlimages/curl \
+  --restart=Never \
+  -- \
+  curl \
+  -H "X-Scope-OrgID: local" \
+  http://loki.loki.svc.cluster.local:3100/loki/api/v1/labels
+```
+
+Finally check Grafana.
+
+---
+
+# 🧹 Cleanup
+
+When the lab is complete:
+
+Delete nginx:
 
 ```bash
 kubectl delete -f nginx.yaml
 ```
 
-Remove Grafana:
+Delete Grafana:
 
 ```bash
 helm uninstall grafana -n monitoring
 ```
 
-Remove Alloy:
+Delete Alloy:
 
 ```bash
 helm uninstall alloy -n alloy
 ```
 
-Remove Loki:
+Delete Loki:
 
 ```bash
 helm uninstall loki -n loki
 ```
 
-Remove namespaces:
+Delete namespaces:
 
 ```bash
 kubectl delete namespace monitoring
@@ -2003,71 +1954,63 @@ kubectl delete namespace loki
 
 ---
 
-# 🎯 Final Learning Outcome
+# 🎓 What Students Learn
 
-At the end of the lab, students should be able to explain:
+By completing this lab, students will understand:
 
 ```text
-How does a Kubernetes Pod's log reach Grafana?
+✓ What Grafana Alloy is
+✓ Alloy component architecture
+✓ Alloy configuration syntax
+✓ Component naming
+✓ Arguments
+✓ Exports
+✓ Receivers
+✓ forward_to
+✓ Kubernetes discovery
+✓ Kubernetes log collection
+✓ loki.source.kubernetes
+✓ loki.process
+✓ Processing stages
+✓ Static labels
+✓ loki.write
+✓ Loki ingestion
+✓ Loki tenants
+✓ Kubernetes Service DNS
+✓ Kubernetes RBAC
+✓ LogQL
+✓ Grafana Explore
+✓ End-to-end troubleshooting
 ```
 
-The answer should be:
+## Final Concept
+
+The most important thing students should take away is:
 
 ```text
-Application Pod
-      ↓
-Container stdout/stderr
-      ↓
-Kubernetes logs
-      ↓
-Grafana Alloy
-      ↓
-discovery.kubernetes
-      ↓
+                ALLOY
+
+     Discover
+        ↓
+  discovery.kubernetes
+        ↓
+     Collect
+        ↓
 loki.source.kubernetes
-      ↓
-loki.process
-      ↓
-loki.write
-      ↓
-Loki
-      ↓
-LogQL
-      ↓
-Grafana Explore
+        ↓
+     Process
+        ↓
+   loki.process
+        ↓
+      Write
+        ↓
+    loki.write
+        ↓
+       LOKI
+        ↓
+     Query
+        ↓
+     GRAFANA
 ```
 
-They should also understand that Alloy is not the log storage system.
-
-```text
-Alloy
-  =
-Collect + Process + Forward
-
-Loki
-  =
-Store + Query
-
-Grafana
-  =
-Visualize + Explore
-```
-
----
-
-# 🧠 Key Alloy Concepts Demonstrated
-
-| Concept        | Used in Lab                                                                    |
-| -------------- | ------------------------------------------------------------------------------ |
-| Component      | `discovery.kubernetes`, `loki.source.kubernetes`, `loki.process`, `loki.write` |
-| Component name | `"pods"`, `"add_app"`, `"endpoint"`                                            |
-| Argument       | `targets`, `forward_to`, `url`, `tenant_id`                                    |
-| Export         | `discovery.kubernetes.pods.targets`                                            |
-| Receiver       | `loki.write.endpoint.receiver`                                                 |
-| Data flow      | `SOURCE → PROCESS → WRITE`                                                     |
-| Discovery      | Kubernetes Pods                                                                |
-| Source         | Kubernetes container logs                                                      |
-| Processing     | Add `app="nginx"`                                                              |
-| Destination    | Loki                                                                           |
-| Query          | LogQL                                                                          |
-| Visualization  | Grafana Explore                                                                |
+This gives you a **proper end-to-end Alloy lab** rather than just installing Alloy and forwarding logs.
